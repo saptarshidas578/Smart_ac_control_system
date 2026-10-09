@@ -13,6 +13,12 @@ An industrial-grade HVAC compressor protection and telemetry controller utilizin
 
 The Smart AC Control System is an embedded equipment-protection controller designed to intercept and evaluate indoor thermostat commands before activating high-power outdoor HVAC compressors. Outdoor air conditioning compressors are vulnerable to catastrophic thermal burnouts caused by condenser fan failure, low refrigerant pressure, or rapid on/off short-cycling. This controller runs a non-blocking 5-stage Finite State Machine (FSM) that monitors compressor head and condenser fan temperatures via dual MAX31865 SPI RTD amplifiers, samples fan current via a current transformer on the analog input, and enforces a mandatory 3-minute anti-short-cycle delay. When operating parameters are safe, the system energizes the compressor contactor relay; upon anomaly detection, it triggers an immediate emergency shutdown, logs the fault code to onboard EEPROM, and dispatches detailed alarm embeds via Discord webhooks.
 
+<p align="center">
+  <img src="docs/images/ac_controller_enclosure.jpg" alt="Smart AC Control System Industrial Enclosure" width="550"/>
+  <br>
+  <em><strong>Figure 1:</strong> Physical controller hardware mounted inside protective electrical junction enclosure, featuring microcontroller board, dual Adafruit MAX31865 RTD PT100 temperature amplifier breakouts, optoisolated compressor contactor relay module, and dedicated AC-DC power converter.</em>
+</p>
+
 ---
 
 ## Features
@@ -26,6 +32,24 @@ The Smart AC Control System is an embedded equipment-protection controller desig
 - **Non-Volatile Equipment History:** On-chip EEPROM records lifetime cumulative compressor run hours and stores the most recent fault trip code across power cycles.
 - **Instant Out-of-Band Cloud Alerting:** Emits encrypted HTTPS Discord webhook embeds containing temperature readings, run duration, and timestamped fault reasons.
 - **Network Time & Resilient Reconnection:** NTP synchronization with IST timezone management and an exponential backoff Wi-Fi reconnection supervisor.
+
+---
+
+
+## Live Firmware Telemetry & State Transitions
+
+<p align="center">
+  <img src="docs/images/serial_telemetry_ac_off.jpg" alt="Telemetry AC OFF State" width="440"/>
+  &nbsp;
+  <img src="docs/images/serial_telemetry_ac_on.jpg" alt="Telemetry AC ON State" width="440"/>
+</p>
+<p align="center">
+  <em><strong>Real-Time PlatformIO Serial Monitor Telemetry:</strong>
+  <br>
+  <strong>Left (Standby / Call for Cool):</strong> Dual MAX31865 RTD temperature telemetry (Sensor 1 at 33.36°C, Sensor 2 at 34.64°C) with analog current feedback zeroed (0.00) while AC is in standby (<code>AC OFF</code>, <code>RELAY ON</code>).
+  <br>
+  <strong>Right (Active Cooling Cycle):</strong> Real-time transition to active refrigeration (<code>AC ON</code>, <code>RELAY OFF</code>) with 2,000-sample averaged analog current detection (5.26 count average) confirming compressor load under safe thermal thresholds.</em>
+</p>
 
 ---
 
@@ -184,5 +208,4 @@ const char* discordWebhookURL = "YOUR_DISCORD_WEBHOOK_URL";
 
 ## License
 
-Recommended: [MIT License](https://opensource.org/licenses/MIT).  
-*TODO(author): confirm license selection.*
+This project is licensed under the [MIT License](LICENSE).

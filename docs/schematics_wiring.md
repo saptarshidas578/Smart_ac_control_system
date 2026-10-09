@@ -12,3 +12,11 @@
 | **AC Call Signal (Optocoupler)** | AC_SENSOR | **D1** | **GPIO 5**  | Debounced 230V AC thermostat input |
 | **Compressor Contactor Relay** | RELAY_OUTPUT | **D2** | **GPIO 4**  | Active High/Low relay coil driver |
 | **Condenser Fan CT Sensor** | Current Sense | **A0** | **ADC0**    | 0-1.0V conditioned analog AC signal |
+
+## Hardware Prototype & Enclosure Assembly
+
+<p align="center">
+  <img src="images/ac_controller_enclosure.jpg" alt="Enclosure Assembly Layout" width="550"/>
+  <br>
+  <em>Figure: Physical layout inside wall-mount junction box showing optoisolated relay stage (left), dual MAX31865 RTD boards (center), and microcontroller interface (right).</em>
+</p>
