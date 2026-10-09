@@ -1,3 +1,28 @@
+/**
+ * ====================================================================================================
+ * @file main.cpp
+ * @brief Industrial HVAC Compressor Protection & IoT Telemetry System
+ * @author saptarshi2007 (https://github.com/saptarshidas578)
+ * 
+ * @details
+ * An intelligent embedded protection controller for air conditioner outdoor compressor units:
+ * - Finite State Machine (FSM): IDLE, STARTING, RUNNING, COOLDOWN, FAULT.
+ * - Precision Thermal Sensing: Dual MAX31865 SPI RTD amplifiers with PT100 sensors for compressor & fan.
+ * - AC Signal & Current Sensing: Custom optoisolated AC control detect (D1) and analog CT current (A0).
+ * - Equipment Safeguards: 3-minute anti-short-cycle lockouts, startup stabilization, thermal trip gates.
+ * - Non-Volatile Reliability: EEPROM runtime tracking (hours) and persistent fault logging.
+ * - IoT Telemetry: Non-blocking Wi-Fi reconnection, NTP synchronization, and Discord webhook alerting.
+ * 
+ * Hardware Peripherals:
+ * - NodeMCU v2 (ESP8266 @ 80/160 MHz)
+ * - SENSOR1_CS (Compressor PT100 MAX31865): GPIO 16 (D0)
+ * - SENSOR2_CS (Condenser Fan PT100 MAX31865): GPIO 2 (D4)
+ * - AC_SENSOR (Indoor Unit Call for Cool): GPIO 5 (D1)
+ * - ANALOG_PIN (Fan Current Transformer CT): A0 (ADC0, 0-1.0V)
+ * - RELAY_OUTPUT (Compressor Contactor Relay): GPIO 4 (D2)
+ * ====================================================================================================
+ */
+
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_MAX31865.h>
@@ -115,6 +140,10 @@ String stateToString(HvacState state) {
   }
 }
 
+/**
+ * @brief Reads accumulated compressor runtime hours and last recorded fault code from EEPROM.
+ * @details Validates EEPROM contents and initializes system runtime counters on startup.
+ */
 void loadEEPROMData() {
   EEPROM.get(ADDR_RUNTIME, totalCompressorRuntimeSec);
   if (totalCompressorRuntimeSec == 0xFFFFFFFF) { // Uninitialized EEPROM
@@ -126,11 +155,18 @@ void loadEEPROMData() {
   Serial.println(totalCompressorRuntimeSec);
 }
 
+/**
+ * @brief Commits current compressor runtime in hours into EEPROM.
+ */
 void saveRuntime() {
   EEPROM.put(ADDR_RUNTIME, totalCompressorRuntimeSec);
   EEPROM.commit();
 }
 
+/**
+ * @brief Logs critical HVAC fault condition into non-volatile EEPROM storage.
+ * @param faultState FSM state representing the specific fault condition tripped.
+ */
 void logFault(HvacState faultState) {
   EEPROM.put(ADDR_LAST_FAULT, (uint8_t)faultState);
   EEPROM.commit();
@@ -143,6 +179,11 @@ void queueMessage(String msg, bool force = false) {
   Serial.println("[QUEUE]: " + msg);
 }
 
+/**
+ * @brief Transitions HVAC state machine to target state and logs transition reason.
+ * @param newState Next operational state (IDLE, STARTING, RUNNING, COOLDOWN, FAULT).
+ * @param reason Human-readable diagnostic description of trigger condition.
+ */
 void changeState(HvacState newState, String reason) {
   HvacState oldState = currentState;
   currentState = newState;
@@ -193,6 +234,11 @@ double calculateRMSCurrent() {
   return calibratedAmps;
 }
 
+/**
+ * @brief Non-blocking sensor polling task executed every SENSOR_POLL_MS (2000 ms).
+ * @details Queries dual MAX31865 PT100 RTD amplifiers for compressor and fan temperatures,
+ *          checks RTD fault status bits, and reads fan current transformer analog voltage.
+ */
 void readSensorsTask() {
   static unsigned long lastSensorRead = 0;
   if (millis() - lastSensorRead < SENSOR_POLL_MS) return;
@@ -212,6 +258,10 @@ void readSensorsTask() {
   FAN_CURRENT = calculateRMSCurrent();
 }
 
+/**
+ * @brief Software debouncing filter for indoor unit AC thermostat trigger signal.
+ * @details Filters AC zero-crossing noise and contact bounce using a 50 ms debounce window.
+ */
 void debounceInputTask() {
   int reading = digitalRead(AC_SENSOR);
   if (reading != lastAcPinState) {
@@ -231,6 +281,11 @@ void debounceInputTask() {
 // 5. CONTROL TASK (STATE MACHINE)
 // ==============================================================================
 
+/**
+ * @brief Main HVAC FSM control engine enforcing compressor protection rules.
+ * @details Evaluates thermostat calls, startup delays, fan current thresholds,
+ *          anti-short-cycle delays, and compressor thermal cutoffs before asserting relay.
+ */
 void controlTask() {
   unsigned long timeInState = millis() - stateStartTime;
 
@@ -320,6 +375,10 @@ String getTimeString() {
   return String(buffer);
 }
 
+/**
+ * @brief Transmits queued telemetry and alarm payloads to Discord webhook over HTTPS.
+ * @details Utilizes WiFiClientSecure and HTTPClient with TLS connection.
+ */
 void executeDiscordSend() {
   if (!WIFI_READY || pendingDiscordMessage == "") return;
 
@@ -351,6 +410,10 @@ void executeDiscordSend() {
   lastDiscordSend = millis();
 }
 
+/**
+ * @brief Non-blocking telemetry dispatch manager.
+ * @details Dispatches telemetry updates on timer or immediately upon critical state fault trips.
+ */
 void communicationTask() {
   // Handle Periodic Status Update
   if (WIFI_READY && (millis() - lastDiscordSend >= DISCORD_INTERVAL_MS)) {
@@ -368,6 +431,11 @@ void communicationTask() {
 }
 
 // --- WiFi Setup Functions (Unchanged Logic, Modularized) ---
+/**
+ * @brief Synchronizes ESP8266 local time with NTP time servers.
+ * @param maxBlockMs Maximum timeout allowed for NTP sync before returning.
+ * @return true if timestamp acquired, false otherwise.
+ */
 bool syncNTP(unsigned long maxBlockMs) {
   configTime(TZ_Asia_Kolkata, "pool.ntp.org", "time.google.com", "time.nist.gov");
   unsigned long startTime = millis();
@@ -379,6 +447,10 @@ bool syncNTP(unsigned long maxBlockMs) {
   return false;
 }
 
+/**
+ * @brief Non-blocking Wi-Fi state machine and connection supervisor.
+ * @details Re-establishes network connection after dropouts with exponential backoff.
+ */
 void connectWiFiTask() {
   if (millis() - lastWiFiAttempt < WIFI_RETRY_INTERVAL_MS && lastWiFiAttempt != 0) return;
   if (WiFi.status() == WL_CONNECTED) return;
@@ -409,6 +481,9 @@ void connectWiFiTask() {
 // 7. SETUP & MAIN LOOP
 // ==============================================================================
 
+/**
+ * @brief Hardware setup hook configuring GPIOs, SPI bus, RTD sensors, EEPROM, and network.
+ */
 void setup() {
   Serial.begin(115200);
   EEPROM.begin(EEPROM_SIZE);
@@ -429,6 +504,9 @@ void setup() {
   changeState(STATE_IDLE, "System Boot Completed.");
 }
 
+/**
+ * @brief Master non-blocking superloop scheduling sensor, control, and comms tasks.
+ */
 void loop() {
   // The magic of a non-blocking architecture:
   // These tasks run as fast as the CPU allows.
