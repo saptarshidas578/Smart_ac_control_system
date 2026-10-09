@@ -1,0 +1,8 @@
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 120
+SortIncludes: false
+BreakStringLiterals: false
+AllowShortFunctionsOnASingleLine: Inline
+BreakBeforeBraces: Attach
+SpacesBeforeTrailingComments: 2
